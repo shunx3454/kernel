@@ -568,6 +568,25 @@ isp_lsc_cfg_sram_task(unsigned long data)
 }
 
 static void
+isp_lsc_tasklet_enable(struct rkisp_isp_params_val_v3x *priv_val)
+{
+	if (!priv_val->lsc_tasklet_enabled) {
+		tasklet_enable(&priv_val->lsc_tasklet);
+		priv_val->lsc_tasklet_enabled = true;
+	}
+}
+
+static void
+isp_lsc_tasklet_disable(struct rkisp_isp_params_val_v3x *priv_val)
+{
+	if (priv_val->lsc_tasklet_enabled) {
+		priv_val->lsc_tasklet_enabled = false;
+		tasklet_kill(&priv_val->lsc_tasklet);
+		tasklet_disable(&priv_val->lsc_tasklet);
+	}
+}
+
+static void
 isp_lsc_config(struct rkisp_isp_params_vdev *params_vdev,
 	       const struct isp3x_lsc_cfg *arg, u32 id)
 {
@@ -583,7 +602,8 @@ isp_lsc_config(struct rkisp_isp_params_vdev *params_vdev,
 	params_rec->others.lsc_cfg = *arg;
 	if (dev->hw_dev->is_single &&
 	    (lsc_ctrl & ISP_LSC_EN) &&
-	    (id == ISP3_LEFT))
+	    (id == ISP3_LEFT) &&
+	    priv_val->lsc_tasklet_enabled)
 		/* latest config for ISP3_LEFT, unite isp or single isp */
 		tasklet_schedule(&priv_val->lsc_tasklet);
 
@@ -645,7 +665,7 @@ isp_lsc_enable(struct rkisp_isp_params_vdev *params_vdev, bool en, u32 id)
 		if (params_vdev->dev->hw_dev->is_single) {
 			if (!in_interrupt())
 				isp_lsc_matrix_cfg_sram(params_vdev, &params_rec->others.lsc_cfg, false, id);
-			else if (id == ISP3_LEFT)
+			else if (id == ISP3_LEFT && priv_val->lsc_tasklet_enabled)
 				tasklet_schedule(&priv_val->lsc_tasklet);
 		}
 	} else {
@@ -4445,7 +4465,7 @@ static void rkisp_save_first_param_v3x(struct rkisp_isp_params_vdev *params_vdev
 		(struct rkisp_isp_params_val_v3x *)params_vdev->priv_val;
 
 	memcpy(params_vdev->isp3x_params, param, params_vdev->vdev_fmt.fmt.meta.buffersize);
-	tasklet_enable(&priv_val->lsc_tasklet);
+	isp_lsc_tasklet_enable(priv_val);
 	rkisp_alloc_internal_buf(params_vdev, params_vdev->isp3x_params);
 }
 
@@ -4620,7 +4640,7 @@ rkisp_params_stream_stop_v3x(struct rkisp_isp_params_vdev *params_vdev)
 	u32 id, i;
 
 	priv_val = (struct rkisp_isp_params_val_v3x *)params_vdev->priv_val;
-	tasklet_disable(&priv_val->lsc_tasklet);
+	isp_lsc_tasklet_disable(priv_val);
 	rkisp_free_buffer(ispdev, &priv_val->buf_3dnr_iir);
 	rkisp_free_buffer(ispdev, &priv_val->buf_3dnr_cur);
 	rkisp_free_buffer(ispdev, &priv_val->buf_3dnr_ds);

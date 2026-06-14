@@ -192,6 +192,7 @@ struct rkisp_isp_params_val_v3x {
 	bool dhaz_en;
 	bool drc_en;
 	bool lsc_en;
+	bool lsc_tasklet_enabled;
 	bool mge_en;
 	bool lut3d_en;
 	bool bay3d_en;
